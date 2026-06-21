@@ -101,7 +101,7 @@ async def async_setup_entry(
                 sensors.append(
                     MinVwEntity(vehicle, "AdBlueRange", True, _connectedcarsclient)
                 )
-            if "EVChargingStatus" in vehicle["has"]:
+            if "EVIsCharging" in vehicle["has"]:
                 sensors.append(
                     MinVwEntity(vehicle, "ChargingStatus", False, _connectedcarsclient)
                 )
@@ -568,20 +568,24 @@ class MinVwEntity(SensorEntity):
                 self._vehicle["id"], ["driverScore", "previousDriverScore"]
             )
         if self._itemName == "EVBatteryCapacity":
+            # factoryBatteryCapacity is the nominal usable capacity (static, e.g.
+            # 77 kWh on an ID.4) and is the meaningful "capacity" value.
             self._state = await self._connectedcarsclient.get_value(
-                self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+                self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
+            )
+            # highVoltageBatteryUsableCapacityKwh is the energy currently available
+            # in the pack (dynamic, degradation-adjusted: e.g. 44 kWh at 66% SoC
+            # implies a current full capacity of ~67 kWh, below the 77 kWh spec).
+            self._dict["Current energy (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+                )
             )
             self._updated = await self._connectedcarsclient.get_value(
                 self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "time"]
             )
-            self._dict["Factory usable capacity (kWh)"] = (
-                await self._connectedcarsclient.get_value(
-                    self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
-                )
-            )
-            # Fall back to factory capacity if no measured value is available
             if self._state is None:
-                self._state = self._dict["Factory usable capacity (kWh)"]
+                self._state = self._dict["Current energy (kWh)"]
         if self._itemName == "EVEfficiency":
             self._state = await self._connectedcarsclient.get_value(
                 self._vehicle["id"],

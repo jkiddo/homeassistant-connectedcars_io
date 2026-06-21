@@ -519,16 +519,6 @@ class MinVW:
             if self._get_vehicle_value(vehicle, ["isCharging"]) is not None:
                 has.append("EVIsCharging")
             if (
-                self._get_vehicle_value(vehicle, ["chargingState", "enabled"])
-                is not None
-            ):
-                has.append("EVChargingCable")
-            if (
-                self._get_vehicle_value(vehicle, ["chargingStatus", "startTime"])
-                is not None
-            ):
-                has.append("EVChargingStatus")
-            if (
                 self._get_vehicle_value(
                     vehicle, ["highVoltageBatteryUsableCapacityKwh", "kwh"]
                 )
@@ -693,10 +683,6 @@ vehicle(id: %s) {
           time
         }
         isCharging
-        chargingState {
-          enabled
-          time
-        }
         chargingStatus {
           startChargePercentage
           startTime

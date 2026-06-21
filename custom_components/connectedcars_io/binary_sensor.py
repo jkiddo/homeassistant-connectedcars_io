@@ -60,17 +60,6 @@ async def async_setup_entry(
                         _connectedcarsclient,
                     )
                 )
-            if "EVChargingCable" in vehicle["has"]:
-                sensors.append(
-                    CcBinaryEntity(
-                        vehicle,
-                        "ChargingCable",
-                        "",
-                        "plug",
-                        False,
-                        _connectedcarsclient,
-                    )
-                )
             for lampState in vehicle["lampStates"]:
                 sensors.append(
                     CcBinaryEntity(
@@ -222,19 +211,6 @@ class CcBinaryEntity(BinarySensorEntity):
                         )
                     ).lower()
                     == "true"
-                )
-
-            elif self._itemName == "ChargingCable":
-                self._is_on = (
-                    str(
-                        await self._connectedcarsclient.get_value(
-                            self._vehicle["id"], ["chargingState", "enabled"]
-                        )
-                    ).lower()
-                    == "true"
-                )
-                self._updated = await self._connectedcarsclient.get_value(
-                    self._vehicle["id"], ["chargingState", "time"]
                 )
 
             elif self._itemName == "Lamp":
