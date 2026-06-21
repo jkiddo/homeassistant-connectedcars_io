@@ -5,7 +5,7 @@ import logging
 import traceback
 
 from homeassistant import config_entries, core
-from homeassistant.components.device_tracker.config_entry import TrackerEntity
+from homeassistant.components.device_tracker import TrackerEntity
 from homeassistant.exceptions import PlatformNotReady
 
 from .const import DOMAIN
