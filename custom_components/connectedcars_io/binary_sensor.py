@@ -49,6 +49,28 @@ async def async_setup_entry(
                         config[CONF_HEALTH_SENSITIVITY],
                     )
                 )
+            if "EVIsCharging" in vehicle["has"]:
+                sensors.append(
+                    CcBinaryEntity(
+                        vehicle,
+                        "Charging",
+                        "",
+                        "battery_charging",
+                        True,
+                        _connectedcarsclient,
+                    )
+                )
+            if "EVChargingCable" in vehicle["has"]:
+                sensors.append(
+                    CcBinaryEntity(
+                        vehicle,
+                        "ChargingCable",
+                        "",
+                        "plug",
+                        False,
+                        _connectedcarsclient,
+                    )
+                )
             for lampState in vehicle["lampStates"]:
                 sensors.append(
                     CcBinaryEntity(
@@ -191,6 +213,29 @@ class CcBinaryEntity(BinarySensorEntity):
                     self._vehicle["id"]
                 )
                 self._is_on = self.evaluate_health()
+
+            elif self._itemName == "Charging":
+                self._is_on = (
+                    str(
+                        await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["isCharging"]
+                        )
+                    ).lower()
+                    == "true"
+                )
+
+            elif self._itemName == "ChargingCable":
+                self._is_on = (
+                    str(
+                        await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["chargingState", "enabled"]
+                        )
+                    ).lower()
+                    == "true"
+                )
+                self._updated = await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["chargingState", "time"]
+                )
 
             elif self._itemName == "Lamp":
                 enabled, self._updated = await self._connectedcarsclient.get_lampstatus(

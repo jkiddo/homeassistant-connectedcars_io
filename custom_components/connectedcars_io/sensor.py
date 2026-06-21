@@ -17,7 +17,9 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfElectricPotential,
+    UnitOfEnergy,
     UnitOfLength,
+    UnitOfPower,
     UnitOfSpeed,
     UnitOfTemperature,
     UnitOfVolume,
@@ -94,6 +96,28 @@ async def async_setup_entry(
             if "RangeTotal" in vehicle["has"]:
                 sensors.append(
                     MinVwEntity(vehicle, "Range", False, _connectedcarsclient)
+                )
+            if "AdBlueRange" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "AdBlueRange", True, _connectedcarsclient)
+                )
+            if "EVChargingStatus" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "ChargingStatus", False, _connectedcarsclient)
+                )
+            if "DriverScore" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "DriverScore", False, _connectedcarsclient)
+                )
+            if "EVBatteryCapacity" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(
+                        vehicle, "EVBatteryCapacity", False, _connectedcarsclient
+                    )
+                )
+            if "EVEfficiency" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "EVEfficiency", False, _connectedcarsclient)
                 )
             if "Speed" in vehicle["has"]:
                 sensors.append(
@@ -225,6 +249,29 @@ class MinVwEntity(SensorEntity):
         elif self._itemName == "fuel economy":
             self._unit = "km/l"
             self._icon = "mdi:gas-station-outline"
+            self._suggested_display_precision = 1
+        elif self._itemName == "AdBlueRange":
+            self._unit = UnitOfLength.KILOMETERS
+            self._icon = "mdi:hydraulic-oil-level"
+            self._device_class = SensorDeviceClass.DISTANCE
+        elif self._itemName == "ChargingStatus":
+            self._unit = UnitOfPower.KILO_WATT
+            self._icon = "mdi:ev-station"
+            self._device_class = SensorDeviceClass.POWER
+            self._suggested_display_precision = 1
+        elif self._itemName == "DriverScore":
+            self._icon = "mdi:account-star"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVBatteryCapacity":
+            self._unit = UnitOfEnergy.KILO_WATT_HOUR
+            self._icon = "mdi:battery-high"
+            self._device_class = SensorDeviceClass.ENERGY_STORAGE
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVEfficiency":
+            self._unit = "kWh/100km"
+            self._icon = "mdi:lightning-bolt"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
             self._suggested_display_precision = 1
 
         _LOGGER.debug("Adding sensor: %s", self._unique_id)
@@ -509,6 +556,59 @@ class MinVwEntity(SensorEntity):
             self._updated = await self._connectedcarsclient.get_value(
                 self._vehicle["id"], ["rangeTotalKm", "time"]
             )
+        if self._itemName == "AdBlueRange":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["adblueRemainingKm", 0, "km"]
+            )
+        if self._itemName == "DriverScore":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["driverScore", "driverScore"]
+            )
+            self._dict["Previous score"] = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["driverScore", "previousDriverScore"]
+            )
+        if self._itemName == "EVBatteryCapacity":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "time"]
+            )
+            self._dict["Factory usable capacity (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
+                )
+            )
+            # Fall back to factory capacity if no measured value is available
+            if self._state is None:
+                self._state = self._dict["Factory usable capacity (kWh)"]
+        if self._itemName == "EVEfficiency":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["averageBatteryConsumptionInKwhPer100Km", "efficiencyKwhPer100Km"],
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["averageBatteryConsumptionInKwhPer100Km", "date"],
+            )
+        if self._itemName == "ChargingStatus":
+            status = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["chargingStatus"]
+            )
+            if status is not None:
+                self._state = status.get("averageChargeSpeed")
+                self._updated = status.get("startTime")
+                self._dict = {
+                    "Start charge percentage": status.get("startChargePercentage"),
+                    "Charged percentage": status.get("chargedPercentage"),
+                    "Time until 80% charge": status.get("timeUntil80PercentCharge"),
+                    "Charge increase (kWh)": status.get("chargeInKwhIncrease"),
+                    "Range increase (km)": status.get("rangeIncrease"),
+                    "Start time": status.get("startTime"),
+                    "Ended at": status.get("endedAt"),
+                }
+            else:
+                self._state = None
 
 
 def is_date_valid(date) -> bool:

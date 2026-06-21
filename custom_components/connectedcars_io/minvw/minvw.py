@@ -511,6 +511,47 @@ class MinVW:
                 has.append("EVHVBattTemp")
             if self._get_vehicle_value(vehicle, ["rangeTotalKm", "km"]) is not None:
                 has.append("RangeTotal")
+            if (
+                self._get_vehicle_value(vehicle, ["adblueRemainingKm", 0, "km"])
+                is not None
+            ):
+                has.append("AdBlueRange")
+            if self._get_vehicle_value(vehicle, ["isCharging"]) is not None:
+                has.append("EVIsCharging")
+            if (
+                self._get_vehicle_value(vehicle, ["chargingState", "enabled"])
+                is not None
+            ):
+                has.append("EVChargingCable")
+            if (
+                self._get_vehicle_value(vehicle, ["chargingStatus", "startTime"])
+                is not None
+            ):
+                has.append("EVChargingStatus")
+            if (
+                self._get_vehicle_value(
+                    vehicle, ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+                )
+                is not None
+                or self._get_vehicle_value(
+                    vehicle, ["factoryBatteryCapacity", "usableCapacityKwh"]
+                )
+                is not None
+            ):
+                has.append("EVBatteryCapacity")
+            if (
+                self._get_vehicle_value(
+                    vehicle,
+                    ["averageBatteryConsumptionInKwhPer100Km", "efficiencyKwhPer100Km"],
+                )
+                is not None
+            ):
+                has.append("EVEfficiency")
+            if (
+                self._get_vehicle_value(vehicle, ["driverScore", "driverScore"])
+                is not None
+            ):
+                has.append("DriverScore")
 
             if self._get_vehicle_value(vehicle, ["ignition", "on"]) is not None:
                 has.append("Ignition")
@@ -650,6 +691,37 @@ vehicle(id: %s) {
         chargePercentage {
           pct
           time
+        }
+        isCharging
+        chargingState {
+          enabled
+          time
+        }
+        chargingStatus {
+          startChargePercentage
+          startTime
+          endedAt
+          chargedPercentage
+          averageChargeSpeed
+          chargeInKwhIncrease
+          rangeIncrease
+          timeUntil80PercentCharge
+          showSummaryForChargeEnded
+        }
+        factoryBatteryCapacity {
+          usableCapacityKwh
+        }
+        highVoltageBatteryUsableCapacityKwh {
+          kwh
+          time
+        }
+        averageBatteryConsumptionInKwhPer100Km {
+          date
+          efficiencyKwhPer100Km
+        }
+        driverScore {
+          driverScore
+          previousDriverScore
         }
         highVoltageBatteryTemperature {
           celsius

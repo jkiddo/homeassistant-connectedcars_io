@@ -46,6 +46,13 @@ Sensor names:
 * BatteryVoltage (12V battery)
 * EVHVBattTemp (EV)
 * EVchargePercentage (EV)
+* Charging (EV) - binary sensor, on while the car is charging
+* ChargingCable (EV) - binary sensor (plug), on when charging is enabled/cable connected (disabled by default)
+* ChargingStatus (EV) - average charge speed (kW); attributes include charged %, time until 80%, kWh/range added (disabled by default)
+* EVBatteryCapacity (EV) - usable HV battery capacity in kWh; factory capacity as attribute (disabled by default)
+* EVEfficiency (EV) - average consumption in kWh/100km (disabled by default)
+* AdBlueRange - remaining AdBlue range in km (diesel)
+* DriverScore - driving score out of ten; previous score as attribute (disabled by default)
 * fuelLevel
 * fuelPercentage
 * GeoLocation
