@@ -1,3 +1,8 @@
+# Local binaries / extracted artifacts (large, not part of the integration)
+extracted/
+*.apk
+*.xapk
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

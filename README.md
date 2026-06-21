@@ -48,8 +48,10 @@ Sensor names:
 * EVchargePercentage (EV)
 * Charging (EV) - binary sensor, on while the car is charging
 * ChargingStatus (EV) - average charge speed (kW) while charging; attributes include charged %, time until 80%, kWh/range added (disabled by default)
-* EVBatteryCapacity (EV) - nominal usable battery capacity in kWh; dynamic estimate as attribute (disabled by default)
-* EVEfficiency (EV) - average consumption in kWh/100km (disabled by default)
+* EVBatteryCapacity (EV) - current usable battery capacity in kWh (degradation-adjusted); factory spec and energy-available-now as attributes (disabled by default)
+* EVBatteryHealth (EV) - battery State of Health in %; predicted SoH and charge cycles as attributes
+* EVEfficiency (EV) - average consumption in kWh/100km; km/kWh as attribute (disabled by default)
+* PowerDisconnected - binary sensor (problem), on if the OBD device has been unplugged (disabled by default)
 * AdBlueRange - remaining AdBlue range in km (diesel)
 * DriverScore - driving score out of ten; previous score as attribute (disabled by default)
 * fuelLevel

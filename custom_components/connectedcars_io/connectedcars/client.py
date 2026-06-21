@@ -17,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 _LOGGER = logging.getLogger(__name__)
 
 
-class MinVW:
+class ConnectedCarsClient:
     """Primary exported interface for connectedcars.io API wrapper."""
 
     def __init__(self, email, password, namespace) -> None:
@@ -520,6 +520,10 @@ class MinVW:
                 has.append("EVIsCharging")
             if (
                 self._get_vehicle_value(
+                    vehicle, ["estimatedUsableBatteryCapacityInKwh", "usableCapacityKwh"]
+                )
+                is not None
+                or self._get_vehicle_value(
                     vehicle, ["highVoltageBatteryUsableCapacityKwh", "kwh"]
                 )
                 is not None
@@ -531,12 +535,23 @@ class MinVW:
                 has.append("EVBatteryCapacity")
             if (
                 self._get_vehicle_value(
+                    vehicle, ["highVoltageBatteryHealth", "relativeUsableCapacity"]
+                )
+                is not None
+            ):
+                has.append("EVBatteryHealth")
+            if (
+                self._get_vehicle_value(
                     vehicle,
                     ["averageBatteryConsumptionInKwhPer100Km", "efficiencyKwhPer100Km"],
                 )
                 is not None
+                or self._get_vehicle_value(vehicle, ["batteryEfficiencyKmPerKwh"])
+                is not None
             ):
                 has.append("EVEfficiency")
+            if self._get_vehicle_value(vehicle, ["isMainPowerDisconnected"]) is not None:
+                has.append("MainPowerDisconnected")
             if (
                 self._get_vehicle_value(vehicle, ["driverScore", "driverScore"])
                 is not None
@@ -696,15 +711,32 @@ vehicle(id: %s) {
         }
         factoryBatteryCapacity {
           usableCapacityKwh
+          totalCapacityKwh
+        }
+        estimatedUsableBatteryCapacityInKwh {
+          usableCapacityKwh
+          date
+        }
+        highVoltageBatteryTotalCapacityKwh {
+          kwh
+          time
         }
         highVoltageBatteryUsableCapacityKwh {
           kwh
+          time
+        }
+        highVoltageBatteryHealth {
+          relativeUsableCapacity
+          predictedRelativeUsableCapacity
+          cycles
           time
         }
         averageBatteryConsumptionInKwhPer100Km {
           date
           efficiencyKwhPer100Km
         }
+        batteryEfficiencyKmPerKwh
+        isMainPowerDisconnected
         driverScore {
           driverScore
           previousDriverScore

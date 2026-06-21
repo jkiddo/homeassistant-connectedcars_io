@@ -12,7 +12,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
 from .const import DOMAIN, CONF_HEALTH_SENSITIVITY
-from .minvw import MinVW
+from .connectedcars import ConnectedCarsClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ from homeassistant.const import (
 #     session = async_get_clientsession(hass)
 #     gh = GitHubAPI(session, "requester", oauth_token=access_token)
 #     try:
-#         client = await MinVW(email, password, namespace)
+#         client = await ConnectedCarsClient(email, password, namespace)
 #     except BadRequest:
 #         raise ValueError
 
@@ -50,7 +50,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                client = MinVW(
+                client = ConnectedCarsClient(
                     user_input[CONF_EMAIL],
                     user_input[CONF_PASSWORD],
                     user_input["namespace"],

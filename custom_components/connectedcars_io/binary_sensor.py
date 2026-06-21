@@ -60,6 +60,17 @@ async def async_setup_entry(
                         _connectedcarsclient,
                     )
                 )
+            if "MainPowerDisconnected" in vehicle["has"]:
+                sensors.append(
+                    CcBinaryEntity(
+                        vehicle,
+                        "PowerDisconnected",
+                        "",
+                        "problem",
+                        False,
+                        _connectedcarsclient,
+                    )
+                )
             for lampState in vehicle["lampStates"]:
                 sensors.append(
                     CcBinaryEntity(
@@ -208,6 +219,16 @@ class CcBinaryEntity(BinarySensorEntity):
                     str(
                         await self._connectedcarsclient.get_value(
                             self._vehicle["id"], ["isCharging"]
+                        )
+                    ).lower()
+                    == "true"
+                )
+
+            elif self._itemName == "PowerDisconnected":
+                self._is_on = (
+                    str(
+                        await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["isMainPowerDisconnected"]
                         )
                     ).lower()
                     == "true"

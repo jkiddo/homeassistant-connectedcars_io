@@ -5,7 +5,7 @@ import logging
 from homeassistant import config_entries, core
 
 from .const import CONF_HEALTH_SENSITIVITY, DOMAIN
-from .minvw import MinVW
+from .connectedcars import ConnectedCarsClient
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["binary_sensor", "device_tracker", "sensor"]
@@ -22,7 +22,7 @@ async def async_setup_entry(
     data["email"] = entry.data["email"]
     data["password"] = entry.data["password"]
     data["namespace"] = entry.data["namespace"]
-    data["connectedcarsclient"] = MinVW(
+    data["connectedcarsclient"] = ConnectedCarsClient(
         entry.data["email"], entry.data["password"], entry.data["namespace"]
     )
     data[CONF_HEALTH_SENSITIVITY] = entry.options.get(CONF_HEALTH_SENSITIVITY, "medium")

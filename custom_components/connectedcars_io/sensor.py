@@ -115,6 +115,10 @@ async def async_setup_entry(
                         vehicle, "EVBatteryCapacity", False, _connectedcarsclient
                     )
                 )
+            if "EVBatteryHealth" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "EVBatteryHealth", True, _connectedcarsclient)
+                )
             if "EVEfficiency" in vehicle["has"]:
                 sensors.append(
                     MinVwEntity(vehicle, "EVEfficiency", False, _connectedcarsclient)
@@ -267,6 +271,11 @@ class MinVwEntity(SensorEntity):
             self._unit = UnitOfEnergy.KILO_WATT_HOUR
             self._icon = "mdi:battery-high"
             self._device_class = SensorDeviceClass.ENERGY_STORAGE
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVBatteryHealth":
+            self._unit = PERCENTAGE
+            self._icon = "mdi:battery-heart-variant"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
             self._suggested_display_precision = 1
         elif self._itemName == "EVEfficiency":
             self._unit = "kWh/100km"
@@ -568,24 +577,53 @@ class MinVwEntity(SensorEntity):
                 self._vehicle["id"], ["driverScore", "previousDriverScore"]
             )
         if self._itemName == "EVBatteryCapacity":
-            # factoryBatteryCapacity is the nominal usable capacity (static, e.g.
-            # 77 kWh on an ID.4) and is the meaningful "capacity" value.
+            # estimatedUsableBatteryCapacityInKwh is the current real usable
+            # capacity (degradation-adjusted, e.g. 67.8 kWh vs the 77 kWh spec).
             self._state = await self._connectedcarsclient.get_value(
-                self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
+                self._vehicle["id"],
+                ["estimatedUsableBatteryCapacityInKwh", "usableCapacityKwh"],
             )
-            # highVoltageBatteryUsableCapacityKwh is the energy currently available
-            # in the pack (dynamic, degradation-adjusted: e.g. 44 kWh at 66% SoC
-            # implies a current full capacity of ~67 kWh, below the 77 kWh spec).
-            self._dict["Current energy (kWh)"] = (
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["estimatedUsableBatteryCapacityInKwh", "date"]
+            )
+            self._dict["Factory usable (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
+                )
+            )
+            self._dict["Factory total (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["factoryBatteryCapacity", "totalCapacityKwh"]
+                )
+            )
+            self._dict["Energy available now (kWh)"] = (
                 await self._connectedcarsclient.get_value(
                     self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "kwh"]
                 )
             )
-            self._updated = await self._connectedcarsclient.get_value(
-                self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "time"]
-            )
+            # Fall back to the factory spec if the estimate isn't available yet.
             if self._state is None:
-                self._state = self._dict["Current energy (kWh)"]
+                self._state = self._dict["Factory usable (kWh)"]
+        if self._itemName == "EVBatteryHealth":
+            # relativeUsableCapacity is a fraction (0.87 = 87% State of Health).
+            relative = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["highVoltageBatteryHealth", "relativeUsableCapacity"],
+            )
+            self._state = round(relative * 100, 1) if relative is not None else None
+            predicted = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["highVoltageBatteryHealth", "predictedRelativeUsableCapacity"],
+            )
+            self._dict["Predicted (%)"] = (
+                round(predicted * 100, 1) if predicted is not None else None
+            )
+            self._dict["Charge cycles"] = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryHealth", "cycles"]
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryHealth", "time"]
+            )
         if self._itemName == "EVEfficiency":
             self._state = await self._connectedcarsclient.get_value(
                 self._vehicle["id"],
@@ -594,6 +632,11 @@ class MinVwEntity(SensorEntity):
             self._updated = await self._connectedcarsclient.get_value(
                 self._vehicle["id"],
                 ["averageBatteryConsumptionInKwhPer100Km", "date"],
+            )
+            self._dict["Efficiency (km/kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["batteryEfficiencyKmPerKwh"]
+                )
             )
         if self._itemName == "ChargingStatus":
             status = await self._connectedcarsclient.get_value(
