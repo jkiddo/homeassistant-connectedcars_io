@@ -138,6 +138,10 @@ async def async_setup_entry(
                         vehicle, "mileage latest month", False, _connectedcarsclient
                     )
                 )
+            if "trips" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "LastTrip", True, _connectedcarsclient)
+                )
             if (
                 "refuelEvents" in vehicle["has"]
                 and "trips" in vehicle["has"]
@@ -281,6 +285,11 @@ class MinVwEntity(SensorEntity):
             self._unit = "kWh/100km"
             self._icon = "mdi:lightning-bolt"
             self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._suggested_display_precision = 1
+        elif self._itemName == "LastTrip":
+            self._unit = UnitOfLength.KILOMETERS
+            self._icon = "mdi:map-marker-path"
+            self._device_class = SensorDeviceClass.DISTANCE
             self._suggested_display_precision = 1
 
         _LOGGER.debug("Adding sensor: %s", self._unique_id)
@@ -638,6 +647,60 @@ class MinVwEntity(SensorEntity):
                     self._vehicle["id"], ["batteryEfficiencyKmPerKwh"]
                 )
             )
+        if self._itemName == "LastTrip" and (
+            self._data_date is None
+            or datetime.now(UTC) >= self._data_date + timedelta(minutes=5)
+        ):
+            trip = await self._connectedcarsclient.get_latest_trip(self._vehicle["id"])
+            if trip is not None:
+                self._state = trip.get("mileage")
+                self._updated = trip.get("endTime")
+                events = trip.get("profilings") or []
+                self._dict = {
+                    "Start time": trip.get("startTime"),
+                    "End time": trip.get("endTime"),
+                    "Duration (min)": trip.get("duration"),
+                    "Idle time (s)": trip.get("idleTime"),
+                    "Start address": trip.get("startAddressString"),
+                    "End address": trip.get("endAddressString"),
+                    "Start odometer (km)": trip.get("startOdometer"),
+                    "End odometer (km)": trip.get("endOdometer"),
+                    "Fuel used (l)": trip.get("fuelUsed"),
+                    "Electricity used (kWh)": trip.get("electricityUsed"),
+                    "Trip type": trip.get("tripType"),
+                    "Note": trip.get("note"),
+                    "Accelerations high": trip.get("accelerationHigh"),
+                    "Accelerations medium": trip.get("accelerationMedium"),
+                    "Accelerations low": trip.get("accelerationLow"),
+                    "Brakes high": trip.get("brakeHigh"),
+                    "Brakes medium": trip.get("brakeMedium"),
+                    "Brakes low": trip.get("brakeLow"),
+                    "Turns high": trip.get("turnHigh"),
+                    "Turns medium": trip.get("turnMedium"),
+                    "Turns low": trip.get("turnLow"),
+                    "Speeding events": sum(
+                        1
+                        for event in events
+                        if str(event.get("type", "")).startswith("speeding")
+                    )
+                    if events
+                    else None,
+                    # The counters above summarize the whole trip; keep the
+                    # last 50 individual events to bound the recorder payload.
+                    "Events": [
+                        {
+                            "type": event.get("type"),
+                            "time": event.get("time"),
+                            "gForce": event.get("gForce"),
+                        }
+                        for event in events[-50:]
+                    ]
+                    or None,
+                }
+                self._dict = {
+                    key: value for key, value in self._dict.items() if value is not None
+                }
+                self._data_date = datetime.now(UTC)
         if self._itemName == "ChargingStatus":
             status = await self._connectedcarsclient.get_value(
                 self._vehicle["id"], ["chargingStatus"]

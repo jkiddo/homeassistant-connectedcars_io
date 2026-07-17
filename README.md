@@ -69,9 +69,24 @@ Sensor names:
 * Mileage latest year (disabled by default)
 * Mileage latest month (disabled by default)
 * Mileage since refuel (disabled by default)
+* LastTrip - distance of the latest completed trip in km; attributes hold the trip details as shown in the app: start/end time and address, duration, fuel/electricity used, and the detected driving events (hard/medium/low accelerations, brakes and turns, speeding), including the individual events with timestamp and g-force
 
 All sensors may not be reported correctedly with all cars.
 Among others fuelPercentage is one of those.
+
+## Events
+When charging starts or stops (EV), a `connectedcars_io_event` event is fired on the Home Assistant event bus, usable as an automation trigger:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: connectedcars_io_event
+    event_data:
+      type: charging_started  # or charging_stopped
+```
+
+Event data: `type`, `vin`, `make`, `model`, `license_plate` and `charge_percentage` (state of charge when the event fired).
+Note the API is polled, so the event fires up to a few minutes after the car actually starts charging.
 
 ## Debugging
 It is possible to debug log the raw response from the API. This is done by setting up logging like below in configuration.yaml in Home Assistant. It is also possible to set the log level through a service call in UI.  

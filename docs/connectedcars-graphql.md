@@ -81,6 +81,27 @@ session), so the ChargingStatus sensor is gated on the always-present
 `rangeIncrease` as km, `chargeInKwhIncrease` as kWh — not explicitly labelled in
 the schema; adjust if a live charge session reports otherwise.
 
+## Trips and driving events (`VehicleTrip`)
+
+`vehicle.trips(last: 1, ignoreEmpty: true)` returns the latest completed trip
+(exposed as the **LastTrip** sensor). Units are documented in the schema:
+`duration` minutes, `idleTime` seconds, `mileage` km, `fuelUsed` liters,
+`electricityUsed` kWh. Besides start/end time/address/odometer, a trip carries
+the driving events the app shows:
+
+- Counters: `accelerationHigh/Medium/Low`, `brakeHigh/Medium/Low`,
+  `turnHigh/Medium/Low`.
+- `profilings { type, time, gForce }` — the individual events. `type` is the
+  `Profiling` enum: `acceleration_*`, `brake_*`, `speeding_*`,
+  `turn_left_*`, `turn_right_*` (each in `high|medium|low`). Note speeding has
+  no counter field — count it from `profilings`.
+
+Permission-gated per the schema docs: the counters and `profilings` need
+`can_see_profiling`, addresses/coordinates need `can_see_position`. Missing
+permissions null those fields; the rest of the trip still resolves. Also
+available but unused: `positions`, `speedReadings`, `weather`, `roadTolls`,
+`co2Emissions`, and `activeTrip` (the ongoing trip, start data only).
+
 ## Testing against a real account
 
 `tools/probe_ev_fields.py` (stdlib only) runs the same auth + query the

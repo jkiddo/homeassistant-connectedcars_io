@@ -192,6 +192,36 @@ class ConnectedCarsClient:
 
     #         return ret, att
 
+    async def get_latest_trip(self, vehicle_id):
+        """Get the latest completed trip, incl. detected driving events.
+
+        The counters and `profilings` require the `can_see_profiling`
+        permission; without it they come back null and the rest of the trip
+        still resolves.
+        """
+        req_param = """query LatestTrip {
+  vehicle(id: %s) {
+    trips(last: 1, ignoreEmpty: true) {items{
+      startTime, endTime, duration, idleTime, mileage,
+      startAddressString, endAddressString,
+      startLatitude, startLongitude, endLatitude, endLongitude,
+      startOdometer, endOdometer,
+      fuelUsed, electricityUsed,
+      accelerationHigh, accelerationMedium, accelerationLow,
+      brakeHigh, brakeMedium, brakeLow,
+      turnHigh, turnMedium, turnLow,
+      tripType, note,
+      profilings{type, time, gForce}
+    }}
+  }}
+        """
+        req_param = req_param % (vehicle_id)
+
+        vehicle_data = await self.api_request(req_param)
+        return self._get_vehicle_value(
+            vehicle_data, ["data", "vehicle", "trips", "items", 0]
+        )
+
     async def get_trip_at_time(self, vehicle_id, isotime):
         """Get trip at a specific time."""
         trip = None
