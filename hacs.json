@@ -1,5 +1,6 @@
 {
   "name": "Connectedcars.io (Min Volkswagen)",
   "render_readme": true,
-  "country": ["DK"]
+  "country": ["DK"],
+  "homeassistant": "2024.12.0"
 }
