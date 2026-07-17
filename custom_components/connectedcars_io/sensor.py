@@ -200,6 +200,7 @@ class MinVwEntity(SensorEntity):
         self._entity_registry_enabled_default = entity_registry_enabled_default
         self._dict = {}
         self._updated = None
+        self._last_trip_end = None
 
         if self._itemName == "outdoorTemperature":
             self._unit = UnitOfTemperature.CELSIUS
@@ -653,6 +654,29 @@ class MinVwEntity(SensorEntity):
         ):
             trip = await self._connectedcarsclient.get_latest_trip(self._vehicle["id"])
             if trip is not None:
+                # _last_trip_end is None on the first update after (re)start,
+                # so a restart never fires a spurious event.
+                if (
+                    self._last_trip_end is not None
+                    and trip.get("endTime") != self._last_trip_end
+                    and self.hass is not None
+                ):
+                    event_data = {
+                        "type": "trip_ended",
+                        "vin": self._vehicle["vin"],
+                        "make": self._vehicle["make"],
+                        "model": self._vehicle["model"],
+                        "license_plate": self._vehicle["licensePlate"],
+                        "trip": {
+                            key: value
+                            for key, value in trip.items()
+                            if key != "profilings"
+                        }
+                        | {"events": trip.get("profilings") or []},
+                    }
+                    _LOGGER.debug("Firing event %s_event: %s", DOMAIN, event_data)
+                    self.hass.bus.async_fire(f"{DOMAIN}_event", event_data)
+                self._last_trip_end = trip.get("endTime")
                 self._state = trip.get("mileage")
                 self._updated = trip.get("endTime")
                 events = trip.get("profilings") or []

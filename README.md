@@ -75,18 +75,32 @@ All sensors may not be reported correctedly with all cars.
 Among others fuelPercentage is one of those.
 
 ## Events
-When charging starts or stops (EV), a `connectedcars_io_event` event is fired on the Home Assistant event bus, usable as an automation trigger:
+A `connectedcars_io_event` event is fired on the Home Assistant event bus, usable as an automation trigger:
+* `charging_started` / `charging_stopped` (EV) — when the car starts or stops charging. Data: `type`, `vin`, `make`, `model`, `license_plate` and `charge_percentage` (state of charge when the event fired).
+* `trip_ended` — when a new completed trip is detected. Data: `type`, `vin`, `make`, `model`, `license_plate` and `trip` with the full trip details (times, addresses, mileage, fuel/electricity used, acceleration/brake/turn counters and the individual `events` with type, time and g-force). Since events show up in the Logbook, this also gives a browsable trip history.
 
 ```yaml
 trigger:
   - platform: event
     event_type: connectedcars_io_event
     event_data:
-      type: charging_started  # or charging_stopped
+      type: trip_ended  # or charging_started / charging_stopped
 ```
 
-Event data: `type`, `vin`, `make`, `model`, `license_plate` and `charge_percentage` (state of charge when the event fired).
-Note the API is polled, so the event fires up to a few minutes after the car actually starts charging.
+Note the API is polled, so events fire up to a few minutes after the fact.
+
+## Services
+`connectedcars_io.get_trips` returns the trip history (newest first), for use in scripts or template cards. All fields are optional: `vin` (needed with multiple cars), `from_time` / `to_time` (range filter), `limit` (default 20, max 100) and `include_events` (include the individual driving events per trip).
+
+```yaml
+action: connectedcars_io.get_trips
+data:
+  from_time: "2026-07-01T00:00:00+02:00"
+  limit: 50
+response_variable: result
+```
+
+Try it in Developer tools / Actions to see the response shape.
 
 ## Debugging
 It is possible to debug log the raw response from the API. This is done by setting up logging like below in configuration.yaml in Home Assistant. It is also possible to set the log level through a service call in UI.  

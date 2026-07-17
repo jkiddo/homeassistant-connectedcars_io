@@ -16,6 +16,21 @@ from dateutil.relativedelta import relativedelta
 
 _LOGGER = logging.getLogger(__name__)
 
+# Fields fetched per trip. The counters and profilings require the
+# `can_see_profiling` permission; without it they come back null and the
+# rest of the trip still resolves.
+TRIP_FIELDS = """
+      startTime, endTime, duration, idleTime, mileage,
+      startAddressString, endAddressString,
+      startLatitude, startLongitude, endLatitude, endLongitude,
+      startOdometer, endOdometer,
+      fuelUsed, electricityUsed,
+      accelerationHigh, accelerationMedium, accelerationLow,
+      brakeHigh, brakeMedium, brakeLow,
+      turnHigh, turnMedium, turnLow,
+      tripType, note"""
+TRIP_EVENT_FIELDS = ",\n      profilings{type, time, gForce}"
+
 
 class ConnectedCarsClient:
     """Primary exported interface for connectedcars.io API wrapper."""
@@ -193,34 +208,45 @@ class ConnectedCarsClient:
     #         return ret, att
 
     async def get_latest_trip(self, vehicle_id):
-        """Get the latest completed trip, incl. detected driving events.
+        """Get the latest completed trip, incl. detected driving events."""
+        trips = await self.get_trips(vehicle_id, limit=1, include_events=True)
+        return trips[0] if trips else None
 
-        The counters and `profilings` require the `can_see_profiling`
-        permission; without it they come back null and the rest of the trip
-        still resolves.
+    async def get_trips(
+        self,
+        vehicle_id,
+        from_iso=None,
+        to_iso=None,
+        limit=20,
+        include_events=False,
+    ):
+        """Get completed trips, newest first.
+
+        fromTime/toTime filter per the schema: trips ending on or after
+        fromTime, starting on or before toTime.
         """
-        req_param = """query LatestTrip {
+        filters = [f"last: {int(limit)}", "ignoreEmpty: true"]
+        if from_iso is not None:
+            filters.append(f'fromTime: "{from_iso}"')
+        if to_iso is not None:
+            filters.append(f'toTime: "{to_iso}"')
+        fields = TRIP_FIELDS + (TRIP_EVENT_FIELDS if include_events else "")
+
+        req_param = """query Trips {
   vehicle(id: %s) {
-    trips(last: 1, ignoreEmpty: true) {items{
-      startTime, endTime, duration, idleTime, mileage,
-      startAddressString, endAddressString,
-      startLatitude, startLongitude, endLatitude, endLongitude,
-      startOdometer, endOdometer,
-      fuelUsed, electricityUsed,
-      accelerationHigh, accelerationMedium, accelerationLow,
-      brakeHigh, brakeMedium, brakeLow,
-      turnHigh, turnMedium, turnLow,
-      tripType, note,
-      profilings{type, time, gForce}
+    trips(%s) {items{%s
     }}
   }}
-        """
-        req_param = req_param % (vehicle_id)
+        """ % (vehicle_id, ", ".join(filters), fields)
 
         vehicle_data = await self.api_request(req_param)
-        return self._get_vehicle_value(
-            vehicle_data, ["data", "vehicle", "trips", "items", 0]
+        trips = self._get_vehicle_value(
+            vehicle_data, ["data", "vehicle", "trips", "items"]
         )
+        if trips is None:
+            return None
+        # Items come back in chronological order; newest first is more useful.
+        return list(reversed(trips))
 
     async def get_trip_at_time(self, vehicle_id, isotime):
         """Get trip at a specific time."""

@@ -84,7 +84,8 @@ the schema; adjust if a live charge session reports otherwise.
 ## Trips and driving events (`VehicleTrip`)
 
 `vehicle.trips(last: 1, ignoreEmpty: true)` returns the latest completed trip
-(exposed as the **LastTrip** sensor). Units are documented in the schema:
+(exposed as the **LastTrip** sensor, a `trip_ended` bus event, and the
+`get_trips` service which adds `fromTime`/`toTime` range filtering). Units are documented in the schema:
 `duration` minutes, `idleTime` seconds, `mileage` km, `fuelUsed` liters,
 `electricityUsed` kWh. Besides start/end time/address/odometer, a trip carries
 the driving events the app shows:
