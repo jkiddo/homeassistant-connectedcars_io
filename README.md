@@ -111,7 +111,7 @@ url: /api/connectedcars_io/trips_map/<token>?days=7
 aspect_ratio: 75%
 ```
 
-Query parameters: `days` (default 7), `limit` (default 8 — the 8 newest trips get distinct colours, older ones render gray), `vin` (with multiple cars).
+Query parameters: `days` (default 7), `limit` (default 8, max 200 — the 8 newest trips get distinct colours, older ones render gray), `vin` (with multiple cars).
 
 ## Debugging
 It is possible to debug log the raw response from the API. This is done by setting up logging like below in configuration.yaml in Home Assistant. It is also possible to set the log level through a service call in UI.  

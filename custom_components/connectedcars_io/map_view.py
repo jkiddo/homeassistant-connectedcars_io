@@ -193,8 +193,8 @@ class ConnectedCarsTripsMapView(HomeAssistantView):
             return web.Response(status=404, text="Unknown map token")
 
         try:
-            days = min(max(int(request.query.get("days", 7)), 1), 90)
-            limit = min(max(int(request.query.get("limit", 8)), 1), 30)
+            days = min(max(int(request.query.get("days", 7)), 1), 365)
+            limit = min(max(int(request.query.get("limit", 8)), 1), 200)
         except ValueError:
             return web.Response(status=400, text="Bad days/limit")
         vin = request.query.get("vin")
