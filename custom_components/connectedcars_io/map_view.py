@@ -270,6 +270,17 @@ _MAP_HTML = """<!DOCTYPE html>
     box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   }
   .legend h1 { font-size: 12px; margin: 0 0 4px; font-weight: 600; }
+  .ranges { display: flex; gap: 4px; margin: 0 0 6px; }
+  .ranges button {
+    font: inherit; font-size: 11px; color: var(--text-secondary);
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 7px; cursor: pointer;
+  }
+  .ranges button:hover { color: var(--text-primary); }
+  .ranges button.active {
+    color: var(--text-primary); font-weight: 600;
+    border-color: var(--text-secondary);
+  }
   .legend .trip { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
   .legend .trip:hover { text-decoration: underline; }
   .legend .chip { width: 10px; height: 10px; border-radius: 3px; flex: none; }
@@ -316,6 +327,21 @@ const fmt = (iso, withDate) => {
 
 const legend = document.getElementById("legend");
 legend.innerHTML = "<h1>" + (DATA.vehicle || "Bil") + " · ture, seneste " + DATA.days + " dage</h1>";
+
+const ranges = document.createElement("div");
+ranges.className = "ranges";
+[[7, "7 dage"], [30, "30 dage"], [90, "90 dage"], [365, "1 år"]].forEach(([days, label]) => {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  if (days === DATA.days) btn.className = "active";
+  btn.addEventListener("click", () => {
+    const url = new URL(window.location);
+    url.searchParams.set("days", days);
+    window.location = url;
+  });
+  ranges.appendChild(btn);
+});
+legend.appendChild(ranges);
 
 const allBounds = [];
 DATA.trips.forEach((trip) => {
