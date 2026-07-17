@@ -12,6 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_HEALTH_SENSITIVITY, DOMAIN
 from .connectedcars import ConnectedCarsClient
+from .map_view import ConnectedCarsTripsMapView, async_ensure_map_token
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["binary_sensor", "device_tracker", "sensor"]
@@ -94,14 +95,25 @@ async def async_setup_entry(
     hass.data.setdefault(DOMAIN, {})
     _LOGGER.debug("async_setup_entry: [%a][%s]", DOMAIN, entry.entry_id)
 
+    # Must happen before add_update_listener: writing the generated token to
+    # the entry would otherwise trigger a reload loop.
+    map_token = async_ensure_map_token(hass, entry)
+
     data = {}
     data["email"] = entry.data["email"]
     data["password"] = entry.data["password"]
     data["namespace"] = entry.data["namespace"]
+    data["map_token"] = map_token
     data["connectedcarsclient"] = ConnectedCarsClient(
         entry.data["email"], entry.data["password"], entry.data["namespace"]
     )
+    # Lets entities expose the map URL without changing their constructor.
+    data["connectedcarsclient"].map_token = map_token
     data[CONF_HEALTH_SENSITIVITY] = entry.options.get(CONF_HEALTH_SENSITIVITY, "medium")
+
+    if not hass.data.get(f"{DOMAIN}_map_view_registered"):
+        hass.http.register_view(ConnectedCarsTripsMapView(hass))
+        hass.data[f"{DOMAIN}_map_view_registered"] = True
 
     # Registers update listener to update config entry when options are updated, and store a reference to the unsubscribe function
     data["unsub_options_update_listener"] = entry.add_update_listener(

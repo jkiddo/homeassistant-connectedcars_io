@@ -30,6 +30,7 @@ TRIP_FIELDS = """
       turnHigh, turnMedium, turnLow,
       tripType, note"""
 TRIP_EVENT_FIELDS = ",\n      profilings{type, time, gForce}"
+TRIP_POSITION_FIELDS = ",\n      positions{latitude, longitude, time}"
 
 
 class ConnectedCarsClient:
@@ -219,6 +220,7 @@ class ConnectedCarsClient:
         to_iso=None,
         limit=20,
         include_events=False,
+        include_positions=False,
     ):
         """Get completed trips, newest first.
 
@@ -230,7 +232,11 @@ class ConnectedCarsClient:
             filters.append(f'fromTime: "{from_iso}"')
         if to_iso is not None:
             filters.append(f'toTime: "{to_iso}"')
-        fields = TRIP_FIELDS + (TRIP_EVENT_FIELDS if include_events else "")
+        fields = (
+            TRIP_FIELDS
+            + (TRIP_EVENT_FIELDS if include_events else "")
+            + (TRIP_POSITION_FIELDS if include_positions else "")
+        )
 
         req_param = """query Trips {
   vehicle(id: %s) {

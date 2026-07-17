@@ -102,6 +102,17 @@ response_variable: result
 
 Try it in Developer tools / Actions to see the response shape.
 
+## Trip map
+The integration serves an interactive map of recent trips at `/api/connectedcars_io/trips_map/<token>`, with each trip colour-coded and the detected driving events marked on the route (letter = type, colour = severity; hover for details). The URL is in the LastTrip sensor's `Map URL` attribute — the token is a random per-installation secret so the page can be embedded in a dashboard without HA authentication.
+
+```yaml
+type: iframe
+url: /api/connectedcars_io/trips_map/<token>?days=7
+aspect_ratio: 75%
+```
+
+Query parameters: `days` (default 7), `limit` (default 8 — the 8 newest trips get distinct colours, older ones render gray), `vin` (with multiple cars).
+
 ## Debugging
 It is possible to debug log the raw response from the API. This is done by setting up logging like below in configuration.yaml in Home Assistant. It is also possible to set the log level through a service call in UI.  
 

@@ -5,7 +5,7 @@
     "@jnxxx"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["http"],
   "documentation": "https://github.com/jnxxx/homeassistant-connectedcars_io/",
   "homekit": {},
   "integration_type": "hub",

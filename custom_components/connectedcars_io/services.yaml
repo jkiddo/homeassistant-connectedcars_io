@@ -1,0 +1,42 @@
+get_trips:
+  name: Get trips
+  description: >-
+    Return completed trips for a vehicle, newest first, including the detected
+    driving events (accelerations, brakes, turns, speeding).
+  fields:
+    vin:
+      name: VIN
+      description: Vehicle identification number. May be omitted if the account has a single vehicle.
+      required: false
+      example: WVGZZZE2ZMP000000
+      selector:
+        text:
+    from_time:
+      name: From
+      description: Only include trips ending on or after this time.
+      required: false
+      selector:
+        datetime:
+    to_time:
+      name: To
+      description: Only include trips starting on or before this time.
+      required: false
+      selector:
+        datetime:
+    limit:
+      name: Limit
+      description: Maximum number of trips to return (newest first). Default 20.
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+    include_events:
+      name: Include events
+      description: Include the individual detected driving events per trip (type, time, g-force).
+      required: false
+      default: false
+      selector:
+        boolean:

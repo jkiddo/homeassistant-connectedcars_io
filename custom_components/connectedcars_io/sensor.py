@@ -724,6 +724,11 @@ class MinVwEntity(SensorEntity):
                 self._dict = {
                     key: value for key, value in self._dict.items() if value is not None
                 }
+                map_token = getattr(self._connectedcarsclient, "map_token", None)
+                if map_token is not None:
+                    self._dict["Map URL"] = (
+                        f"/api/connectedcars_io/trips_map/{map_token}"
+                    )
                 self._data_date = datetime.now(UTC)
         if self._itemName == "ChargingStatus":
             status = await self._connectedcarsclient.get_value(
