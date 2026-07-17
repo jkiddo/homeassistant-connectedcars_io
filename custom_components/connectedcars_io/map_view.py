@@ -285,6 +285,7 @@ _MAP_HTML = """<!DOCTYPE html>
   .legend .trip:hover { text-decoration: underline; }
   .legend .chip { width: 10px; height: 10px; border-radius: 3px; flex: none; }
   .legend .muted { color: var(--text-secondary); }
+  .legend .total { font-weight: 600; margin: 0 0 4px; }
   .legend .empty { color: var(--text-secondary); }
   .ev-icon {
     display: flex; align-items: center; justify-content: center;
@@ -342,6 +343,14 @@ ranges.className = "ranges";
   ranges.appendChild(btn);
 });
 legend.appendChild(ranges);
+
+const totalKm = DATA.trips.reduce((sum, t) => sum + (t.distanceKm || 0), 0);
+const total = document.createElement("div");
+total.className = "total";
+total.textContent = "I alt " +
+  totalKm.toLocaleString("da-DK", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) +
+  " km · " + DATA.trips.length + (DATA.trips.length === 1 ? " tur" : " ture");
+legend.appendChild(total);
 
 const allBounds = [];
 DATA.trips.forEach((trip) => {
