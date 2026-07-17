@@ -74,6 +74,19 @@ def _parse_ts(value):
         return None
 
 
+def _parse_day(value):
+    """YYYY-MM-DD string to an aware UTC datetime, or None."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+    except (TypeError, ValueError):
+        return None
+
+
+def _api_iso(dt):
+    """Datetime to the API's ISO-8601 Zulu format."""
+    return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def _event_positions(trip):
     """Attach coordinates to each detected event by time-interpolating the
     trip's GPS track."""
@@ -133,8 +146,12 @@ def _trip_path(trip):
     return path
 
 
-def build_payload(vehicle, trips, days):
-    """JSON-serializable payload embedded in the map page."""
+def build_payload(vehicle, trips, selection):
+    """JSON-serializable payload embedded in the map page.
+
+    selection is {"days": int|None, "from": "YYYY-MM-DD"|None, "to": ...} —
+    either a preset day count or a custom date range.
+    """
     out = []
     for idx, trip in enumerate(trips):
         path = _trip_path(trip)
@@ -154,7 +171,7 @@ def build_payload(vehicle, trips, days):
                 "events": _event_positions(trip),
             }
         )
-    return {"vehicle": vehicle.get("name"), "days": days, "trips": out}
+    return {"vehicle": vehicle.get("name"), "selection": selection, "trips": out}
 
 
 def async_ensure_map_token(hass, entry):
@@ -199,6 +216,27 @@ class ConnectedCarsTripsMapView(HomeAssistantView):
             return web.Response(status=400, text="Bad days/limit")
         vin = request.query.get("vin")
 
+        # A from/to date range takes precedence over the days preset.
+        from_q = request.query.get("from")
+        to_q = request.query.get("to")
+        to_iso = None
+        if from_q:
+            start = _parse_day(from_q)
+            end = _parse_day(to_q) if to_q else None
+            if start is None or (to_q and end is None):
+                return web.Response(status=400, text="Bad from/to date")
+            if end is not None and end < start:
+                start, end = end, start
+                from_q, to_q = to_q, from_q
+            from_iso = _api_iso(start)
+            if end is not None:
+                # inclusive end date
+                to_iso = _api_iso(end + timedelta(days=1))
+            selection = {"days": None, "from": from_q, "to": to_q}
+        else:
+            from_iso = _api_iso(datetime.now(UTC) - timedelta(days=days))
+            selection = {"days": days, "from": None, "to": None}
+
         vehicles = await client.get_vehicle_instances()
         vehicle = next(
             (v for v in vehicles if vin is None or v["vin"] == vin), None
@@ -206,22 +244,18 @@ class ConnectedCarsTripsMapView(HomeAssistantView):
         if vehicle is None:
             return web.Response(status=404, text="Unknown VIN")
 
-        from_iso = (
-            (datetime.now(UTC) - timedelta(days=days))
-            .isoformat(timespec="milliseconds")
-            .replace("+00:00", "Z")
-        )
         trips = (
             await client.get_trips(
                 vehicle["id"],
                 from_iso=from_iso,
+                to_iso=to_iso,
                 limit=limit,
                 include_events=True,
                 include_positions=True,
             )
             or []
         )
-        payload = build_payload(vehicle, trips, days)
+        payload = build_payload(vehicle, trips, selection)
         return web.Response(
             text=render_map_html(payload),
             content_type="text/html",
@@ -270,16 +304,22 @@ _MAP_HTML = """<!DOCTYPE html>
     box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   }
   .legend h1 { font-size: 12px; margin: 0 0 4px; font-weight: 600; }
-  .ranges { display: flex; gap: 4px; margin: 0 0 6px; }
-  .ranges button {
+  .ranges, .custom { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; }
+  .ranges button, .custom button {
     font: inherit; font-size: 11px; color: var(--text-secondary);
     background: transparent; border: 1px solid var(--border);
     border-radius: 6px; padding: 2px 7px; cursor: pointer;
   }
-  .ranges button:hover { color: var(--text-primary); }
+  .ranges button:hover, .custom button:hover { color: var(--text-primary); }
   .ranges button.active {
     color: var(--text-primary); font-weight: 600;
     border-color: var(--text-secondary);
+  }
+  .custom { border-top: 1px solid var(--border); padding-top: 6px; }
+  .custom input {
+    font: inherit; font-size: 11px; color: var(--text-primary);
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 6px; padding: 1px 4px; color-scheme: light dark;
   }
   .legend .trip { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
   .legend .trip:hover { text-decoration: underline; }
@@ -326,23 +366,54 @@ const fmt = (iso, withDate) => {
   return d.toLocaleString("da-DK", opts);
 };
 
+const sel = DATA.selection;
+const fmtDay = (s) => new Date(s + "T00:00:00").toLocaleDateString("da-DK",
+  { day: "2-digit", month: "2-digit", year: "numeric" });
+const headline = sel.days != null
+  ? "ture, seneste " + sel.days + " dage"
+  : "ture, " + fmtDay(sel.from) + " – " + (sel.to ? fmtDay(sel.to) : "nu");
 const legend = document.getElementById("legend");
-legend.innerHTML = "<h1>" + (DATA.vehicle || "Bil") + " · ture, seneste " + DATA.days + " dage</h1>";
+legend.innerHTML = "<h1>" + (DATA.vehicle || "Bil") + " · " + headline + "</h1>";
 
 const ranges = document.createElement("div");
 ranges.className = "ranges";
 [[7, "7 dage"], [30, "30 dage"], [90, "90 dage"], [365, "1 år"]].forEach(([days, label]) => {
   const btn = document.createElement("button");
   btn.textContent = label;
-  if (days === DATA.days) btn.className = "active";
+  if (days === sel.days) btn.className = "active";
   btn.addEventListener("click", () => {
     const url = new URL(window.location);
     url.searchParams.set("days", days);
+    url.searchParams.delete("from");
+    url.searchParams.delete("to");
     window.location = url;
   });
   ranges.appendChild(btn);
 });
 legend.appendChild(ranges);
+
+// custom interval: from/to date inputs override the presets
+const custom = document.createElement("div");
+custom.className = "custom";
+const fromInput = document.createElement("input");
+fromInput.type = "date";
+fromInput.value = sel.from || "";
+const toInput = document.createElement("input");
+toInput.type = "date";
+toInput.value = sel.to || "";
+const apply = document.createElement("button");
+apply.textContent = "Vis";
+apply.addEventListener("click", () => {
+  if (!fromInput.value) { fromInput.focus(); return; }
+  const url = new URL(window.location);
+  url.searchParams.delete("days");
+  url.searchParams.set("from", fromInput.value);
+  if (toInput.value) url.searchParams.set("to", toInput.value);
+  else url.searchParams.delete("to");
+  window.location = url;
+});
+custom.append(fromInput, document.createTextNode("–"), toInput, apply);
+legend.appendChild(custom);
 
 const totalKm = DATA.trips.reduce((sum, t) => sum + (t.distanceKm || 0), 0);
 const total = document.createElement("div");
