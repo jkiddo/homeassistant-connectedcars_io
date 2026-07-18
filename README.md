@@ -46,6 +46,14 @@ Sensor names:
 * BatteryVoltage (12V battery)
 * EVHVBattTemp (EV)
 * EVchargePercentage (EV)
+* Charging (EV) - binary sensor, on while the car is charging
+* ChargingStatus (EV) - average charge speed (kW) while charging; attributes include charged %, time until 80%, kWh/range added (disabled by default)
+* EVBatteryCapacity (EV) - current usable battery capacity in kWh (degradation-adjusted); factory spec and energy-available-now as attributes (disabled by default)
+* EVBatteryHealth (EV) - battery State of Health in %; predicted SoH and charge cycles as attributes
+* EVEfficiency (EV) - average consumption in kWh/100km; km/kWh as attribute (disabled by default)
+* PowerDisconnected - binary sensor (problem), on if the OBD device has been unplugged (disabled by default)
+* AdBlueRange - remaining AdBlue range in km (diesel)
+* DriverScore - driving score out of ten; previous score as attribute (disabled by default)
 * fuelLevel
 * fuelPercentage
 * GeoLocation
@@ -61,9 +69,49 @@ Sensor names:
 * Mileage latest year (disabled by default)
 * Mileage latest month (disabled by default)
 * Mileage since refuel (disabled by default)
+* LastTrip - distance of the latest completed trip in km; attributes hold the trip details as shown in the app: start/end time and address, duration, fuel/electricity used, and the detected driving events (hard/medium/low accelerations, brakes and turns, speeding), including the individual events with timestamp and g-force
 
 All sensors may not be reported correctedly with all cars.
 Among others fuelPercentage is one of those.
+
+## Events
+A `connectedcars_io_event` event is fired on the Home Assistant event bus, usable as an automation trigger:
+* `charging_started` / `charging_stopped` (EV) — when the car starts or stops charging. Data: `type`, `vin`, `make`, `model`, `license_plate` and `charge_percentage` (state of charge when the event fired).
+* `trip_ended` — when a new completed trip is detected. Data: `type`, `vin`, `make`, `model`, `license_plate` and `trip` with the full trip details (times, addresses, mileage, fuel/electricity used, acceleration/brake/turn counters and the individual `events` with type, time and g-force). Since events show up in the Logbook, this also gives a browsable trip history.
+
+```yaml
+trigger:
+  - platform: event
+    event_type: connectedcars_io_event
+    event_data:
+      type: trip_ended  # or charging_started / charging_stopped
+```
+
+Note the API is polled, so events fire up to a few minutes after the fact.
+
+## Services
+`connectedcars_io.get_trips` returns the trip history (newest first), for use in scripts or template cards. All fields are optional: `vin` (needed with multiple cars), `from_time` / `to_time` (range filter), `limit` (default 20, max 100) and `include_events` (include the individual driving events per trip).
+
+```yaml
+action: connectedcars_io.get_trips
+data:
+  from_time: "2026-07-01T00:00:00+02:00"
+  limit: 50
+response_variable: result
+```
+
+Try it in Developer tools / Actions to see the response shape.
+
+## Trip map
+The integration serves an interactive map of recent trips at `/api/connectedcars_io/trips_map/<token>`, with each trip colour-coded and the detected driving events marked on the route (letter = type, colour = severity; hover for details). The URL is in the LastTrip sensor's `Map URL` attribute — the token is a random per-installation secret so the page can be embedded in a dashboard without HA authentication.
+
+```yaml
+type: iframe
+url: /api/connectedcars_io/trips_map/<token>?days=7
+aspect_ratio: 75%
+```
+
+Query parameters: `days` (default 7), `from`/`to` (`YYYY-MM-DD`, a custom date range that overrides `days`), `limit` (default 8, max 200 — the 8 newest trips get distinct colours, older ones render gray), `vin` (with multiple cars). The page itself has preset buttons (7/30/90/365 days) and a custom from–to date picker; it shows the total km for the selected span.
 
 ## Debugging
 It is possible to debug log the raw response from the API. This is done by setting up logging like below in configuration.yaml in Home Assistant. It is also possible to set the log level through a service call in UI.  

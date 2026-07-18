@@ -49,6 +49,28 @@ async def async_setup_entry(
                         config[CONF_HEALTH_SENSITIVITY],
                     )
                 )
+            if "EVIsCharging" in vehicle["has"]:
+                sensors.append(
+                    CcBinaryEntity(
+                        vehicle,
+                        "Charging",
+                        "",
+                        "battery_charging",
+                        True,
+                        _connectedcarsclient,
+                    )
+                )
+            if "MainPowerDisconnected" in vehicle["has"]:
+                sensors.append(
+                    CcBinaryEntity(
+                        vehicle,
+                        "PowerDisconnected",
+                        "",
+                        "problem",
+                        False,
+                        _connectedcarsclient,
+                    )
+                )
             for lampState in vehicle["lampStates"]:
                 sensors.append(
                     CcBinaryEntity(
@@ -164,6 +186,7 @@ class CcBinaryEntity(BinarySensorEntity):
 
     async def async_update(self):
         """Update data."""
+        previous_is_on = self._is_on
         self._is_on = None
         try:
             if self._itemName == "Ignition":
@@ -191,6 +214,47 @@ class CcBinaryEntity(BinarySensorEntity):
                     self._vehicle["id"]
                 )
                 self._is_on = self.evaluate_health()
+
+            elif self._itemName == "Charging":
+                self._is_on = (
+                    str(
+                        await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["isCharging"]
+                        )
+                    ).lower()
+                    == "true"
+                )
+                # previous_is_on is None on the first update after (re)start,
+                # so a restart never fires a spurious event.
+                if (
+                    previous_is_on is not None
+                    and self._is_on != previous_is_on
+                    and self.hass is not None
+                ):
+                    event_data = {
+                        "type": "charging_started"
+                        if self._is_on
+                        else "charging_stopped",
+                        "vin": self._vehicle["vin"],
+                        "make": self._vehicle["make"],
+                        "model": self._vehicle["model"],
+                        "license_plate": self._vehicle["licensePlate"],
+                        "charge_percentage": await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["chargePercentage", "pct"]
+                        ),
+                    }
+                    _LOGGER.debug("Firing event %s_event: %s", DOMAIN, event_data)
+                    self.hass.bus.async_fire(f"{DOMAIN}_event", event_data)
+
+            elif self._itemName == "PowerDisconnected":
+                self._is_on = (
+                    str(
+                        await self._connectedcarsclient.get_value(
+                            self._vehicle["id"], ["isMainPowerDisconnected"]
+                        )
+                    ).lower()
+                    == "true"
+                )
 
             elif self._itemName == "Lamp":
                 enabled, self._updated = await self._connectedcarsclient.get_lampstatus(

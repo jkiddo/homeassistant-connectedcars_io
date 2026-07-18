@@ -17,7 +17,9 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfElectricPotential,
+    UnitOfEnergy,
     UnitOfLength,
+    UnitOfPower,
     UnitOfSpeed,
     UnitOfTemperature,
     UnitOfVolume,
@@ -95,6 +97,32 @@ async def async_setup_entry(
                 sensors.append(
                     MinVwEntity(vehicle, "Range", False, _connectedcarsclient)
                 )
+            if "AdBlueRange" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "AdBlueRange", True, _connectedcarsclient)
+                )
+            if "EVIsCharging" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "ChargingStatus", False, _connectedcarsclient)
+                )
+            if "DriverScore" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "DriverScore", False, _connectedcarsclient)
+                )
+            if "EVBatteryCapacity" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(
+                        vehicle, "EVBatteryCapacity", False, _connectedcarsclient
+                    )
+                )
+            if "EVBatteryHealth" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "EVBatteryHealth", True, _connectedcarsclient)
+                )
+            if "EVEfficiency" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "EVEfficiency", False, _connectedcarsclient)
+                )
             if "Speed" in vehicle["has"]:
                 sensors.append(
                     MinVwEntity(vehicle, "Speed", True, _connectedcarsclient)
@@ -109,6 +137,10 @@ async def async_setup_entry(
                     MinVwEntity(
                         vehicle, "mileage latest month", False, _connectedcarsclient
                     )
+                )
+            if "trips" in vehicle["has"]:
+                sensors.append(
+                    MinVwEntity(vehicle, "LastTrip", True, _connectedcarsclient)
                 )
             if (
                 "refuelEvents" in vehicle["has"]
@@ -168,6 +200,7 @@ class MinVwEntity(SensorEntity):
         self._entity_registry_enabled_default = entity_registry_enabled_default
         self._dict = {}
         self._updated = None
+        self._last_trip_end = None
 
         if self._itemName == "outdoorTemperature":
             self._unit = UnitOfTemperature.CELSIUS
@@ -225,6 +258,39 @@ class MinVwEntity(SensorEntity):
         elif self._itemName == "fuel economy":
             self._unit = "km/l"
             self._icon = "mdi:gas-station-outline"
+            self._suggested_display_precision = 1
+        elif self._itemName == "AdBlueRange":
+            self._unit = UnitOfLength.KILOMETERS
+            self._icon = "mdi:hydraulic-oil-level"
+            self._device_class = SensorDeviceClass.DISTANCE
+        elif self._itemName == "ChargingStatus":
+            self._unit = UnitOfPower.KILO_WATT
+            self._icon = "mdi:ev-station"
+            self._device_class = SensorDeviceClass.POWER
+            self._suggested_display_precision = 1
+        elif self._itemName == "DriverScore":
+            self._icon = "mdi:account-star"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVBatteryCapacity":
+            self._unit = UnitOfEnergy.KILO_WATT_HOUR
+            self._icon = "mdi:battery-high"
+            self._device_class = SensorDeviceClass.ENERGY_STORAGE
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVBatteryHealth":
+            self._unit = PERCENTAGE
+            self._icon = "mdi:battery-heart-variant"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._suggested_display_precision = 1
+        elif self._itemName == "EVEfficiency":
+            self._unit = "kWh/100km"
+            self._icon = "mdi:lightning-bolt"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._suggested_display_precision = 1
+        elif self._itemName == "LastTrip":
+            self._unit = UnitOfLength.KILOMETERS
+            self._icon = "mdi:map-marker-path"
+            self._device_class = SensorDeviceClass.DISTANCE
             self._suggested_display_precision = 1
 
         _LOGGER.debug("Adding sensor: %s", self._unique_id)
@@ -509,6 +575,179 @@ class MinVwEntity(SensorEntity):
             self._updated = await self._connectedcarsclient.get_value(
                 self._vehicle["id"], ["rangeTotalKm", "time"]
             )
+        if self._itemName == "AdBlueRange":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["adblueRemainingKm", 0, "km"]
+            )
+        if self._itemName == "DriverScore":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["driverScore", "driverScore"]
+            )
+            self._dict["Previous score"] = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["driverScore", "previousDriverScore"]
+            )
+        if self._itemName == "EVBatteryCapacity":
+            # estimatedUsableBatteryCapacityInKwh is the current real usable
+            # capacity (degradation-adjusted, e.g. 67.8 kWh vs the 77 kWh spec).
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["estimatedUsableBatteryCapacityInKwh", "usableCapacityKwh"],
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["estimatedUsableBatteryCapacityInKwh", "date"]
+            )
+            self._dict["Factory usable (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["factoryBatteryCapacity", "usableCapacityKwh"]
+                )
+            )
+            self._dict["Factory total (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["factoryBatteryCapacity", "totalCapacityKwh"]
+                )
+            )
+            self._dict["Energy available now (kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+                )
+            )
+            # Fall back to the factory spec if the estimate isn't available yet.
+            if self._state is None:
+                self._state = self._dict["Factory usable (kWh)"]
+        if self._itemName == "EVBatteryHealth":
+            # relativeUsableCapacity is a fraction (0.87 = 87% State of Health).
+            relative = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["highVoltageBatteryHealth", "relativeUsableCapacity"],
+            )
+            self._state = round(relative * 100, 1) if relative is not None else None
+            predicted = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["highVoltageBatteryHealth", "predictedRelativeUsableCapacity"],
+            )
+            self._dict["Predicted (%)"] = (
+                round(predicted * 100, 1) if predicted is not None else None
+            )
+            self._dict["Charge cycles"] = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryHealth", "cycles"]
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["highVoltageBatteryHealth", "time"]
+            )
+        if self._itemName == "EVEfficiency":
+            self._state = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["averageBatteryConsumptionInKwhPer100Km", "efficiencyKwhPer100Km"],
+            )
+            self._updated = await self._connectedcarsclient.get_value(
+                self._vehicle["id"],
+                ["averageBatteryConsumptionInKwhPer100Km", "date"],
+            )
+            self._dict["Efficiency (km/kWh)"] = (
+                await self._connectedcarsclient.get_value(
+                    self._vehicle["id"], ["batteryEfficiencyKmPerKwh"]
+                )
+            )
+        if self._itemName == "LastTrip" and (
+            self._data_date is None
+            or datetime.now(UTC) >= self._data_date + timedelta(minutes=5)
+        ):
+            trip = await self._connectedcarsclient.get_latest_trip(self._vehicle["id"])
+            if trip is not None:
+                # _last_trip_end is None on the first update after (re)start,
+                # so a restart never fires a spurious event.
+                if (
+                    self._last_trip_end is not None
+                    and trip.get("endTime") != self._last_trip_end
+                    and self.hass is not None
+                ):
+                    event_data = {
+                        "type": "trip_ended",
+                        "vin": self._vehicle["vin"],
+                        "make": self._vehicle["make"],
+                        "model": self._vehicle["model"],
+                        "license_plate": self._vehicle["licensePlate"],
+                        "trip": {
+                            key: value
+                            for key, value in trip.items()
+                            if key != "profilings"
+                        }
+                        | {"events": trip.get("profilings") or []},
+                    }
+                    _LOGGER.debug("Firing event %s_event: %s", DOMAIN, event_data)
+                    self.hass.bus.async_fire(f"{DOMAIN}_event", event_data)
+                self._last_trip_end = trip.get("endTime")
+                self._state = trip.get("mileage")
+                self._updated = trip.get("endTime")
+                events = trip.get("profilings") or []
+                self._dict = {
+                    "Start time": trip.get("startTime"),
+                    "End time": trip.get("endTime"),
+                    "Duration (min)": trip.get("duration"),
+                    "Idle time (s)": trip.get("idleTime"),
+                    "Start address": trip.get("startAddressString"),
+                    "End address": trip.get("endAddressString"),
+                    "Start odometer (km)": trip.get("startOdometer"),
+                    "End odometer (km)": trip.get("endOdometer"),
+                    "Fuel used (l)": trip.get("fuelUsed"),
+                    "Electricity used (kWh)": trip.get("electricityUsed"),
+                    "Trip type": trip.get("tripType"),
+                    "Note": trip.get("note"),
+                    "Accelerations high": trip.get("accelerationHigh"),
+                    "Accelerations medium": trip.get("accelerationMedium"),
+                    "Accelerations low": trip.get("accelerationLow"),
+                    "Brakes high": trip.get("brakeHigh"),
+                    "Brakes medium": trip.get("brakeMedium"),
+                    "Brakes low": trip.get("brakeLow"),
+                    "Turns high": trip.get("turnHigh"),
+                    "Turns medium": trip.get("turnMedium"),
+                    "Turns low": trip.get("turnLow"),
+                    "Speeding events": sum(
+                        1
+                        for event in events
+                        if str(event.get("type", "")).startswith("speeding")
+                    )
+                    if events
+                    else None,
+                    # The counters above summarize the whole trip; keep the
+                    # last 50 individual events to bound the recorder payload.
+                    "Events": [
+                        {
+                            "type": event.get("type"),
+                            "time": event.get("time"),
+                            "gForce": event.get("gForce"),
+                        }
+                        for event in events[-50:]
+                    ]
+                    or None,
+                }
+                self._dict = {
+                    key: value for key, value in self._dict.items() if value is not None
+                }
+                map_token = getattr(self._connectedcarsclient, "map_token", None)
+                if map_token is not None:
+                    self._dict["Map URL"] = (
+                        f"/api/connectedcars_io/trips_map/{map_token}"
+                    )
+                self._data_date = datetime.now(UTC)
+        if self._itemName == "ChargingStatus":
+            status = await self._connectedcarsclient.get_value(
+                self._vehicle["id"], ["chargingStatus"]
+            )
+            if status is not None:
+                self._state = status.get("averageChargeSpeed")
+                self._updated = status.get("startTime")
+                self._dict = {
+                    "Start charge percentage": status.get("startChargePercentage"),
+                    "Charged percentage": status.get("chargedPercentage"),
+                    "Time until 80% charge": status.get("timeUntil80PercentCharge"),
+                    "Charge increase (kWh)": status.get("chargeInKwhIncrease"),
+                    "Range increase (km)": status.get("rangeIncrease"),
+                    "Start time": status.get("startTime"),
+                    "Ended at": status.get("endedAt"),
+                }
+            else:
+                self._state = None
 
 
 def is_date_valid(date) -> bool:

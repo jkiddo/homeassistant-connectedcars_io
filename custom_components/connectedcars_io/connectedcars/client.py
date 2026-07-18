@@ -16,8 +16,24 @@ from dateutil.relativedelta import relativedelta
 
 _LOGGER = logging.getLogger(__name__)
 
+# Fields fetched per trip. The counters and profilings require the
+# `can_see_profiling` permission; without it they come back null and the
+# rest of the trip still resolves.
+TRIP_FIELDS = """
+      startTime, endTime, duration, idleTime, mileage,
+      startAddressString, endAddressString,
+      startLatitude, startLongitude, endLatitude, endLongitude,
+      startOdometer, endOdometer,
+      fuelUsed, electricityUsed,
+      accelerationHigh, accelerationMedium, accelerationLow,
+      brakeHigh, brakeMedium, brakeLow,
+      turnHigh, turnMedium, turnLow,
+      tripType, note"""
+TRIP_EVENT_FIELDS = ",\n      profilings{type, time, gForce}"
+TRIP_POSITION_FIELDS = ",\n      positions{latitude, longitude, time}"
 
-class MinVW:
+
+class ConnectedCarsClient:
     """Primary exported interface for connectedcars.io API wrapper."""
 
     def __init__(self, email, password, namespace) -> None:
@@ -191,6 +207,52 @@ class MinVW:
     #                 ret = 0
 
     #         return ret, att
+
+    async def get_latest_trip(self, vehicle_id):
+        """Get the latest completed trip, incl. detected driving events."""
+        trips = await self.get_trips(vehicle_id, limit=1, include_events=True)
+        return trips[0] if trips else None
+
+    async def get_trips(
+        self,
+        vehicle_id,
+        from_iso=None,
+        to_iso=None,
+        limit=20,
+        include_events=False,
+        include_positions=False,
+    ):
+        """Get completed trips, newest first.
+
+        fromTime/toTime filter per the schema: trips ending on or after
+        fromTime, starting on or before toTime.
+        """
+        filters = [f"last: {int(limit)}", "ignoreEmpty: true"]
+        if from_iso is not None:
+            filters.append(f'fromTime: "{from_iso}"')
+        if to_iso is not None:
+            filters.append(f'toTime: "{to_iso}"')
+        fields = (
+            TRIP_FIELDS
+            + (TRIP_EVENT_FIELDS if include_events else "")
+            + (TRIP_POSITION_FIELDS if include_positions else "")
+        )
+
+        req_param = """query Trips {
+  vehicle(id: %s) {
+    trips(%s) {items{%s
+    }}
+  }}
+        """ % (vehicle_id, ", ".join(filters), fields)
+
+        vehicle_data = await self.api_request(req_param)
+        trips = self._get_vehicle_value(
+            vehicle_data, ["data", "vehicle", "trips", "items"]
+        )
+        if trips is None:
+            return None
+        # Items come back in chronological order; newest first is more useful.
+        return list(reversed(trips))
 
     async def get_trip_at_time(self, vehicle_id, isotime):
         """Get trip at a specific time."""
@@ -511,6 +573,52 @@ class MinVW:
                 has.append("EVHVBattTemp")
             if self._get_vehicle_value(vehicle, ["rangeTotalKm", "km"]) is not None:
                 has.append("RangeTotal")
+            if (
+                self._get_vehicle_value(vehicle, ["adblueRemainingKm", 0, "km"])
+                is not None
+            ):
+                has.append("AdBlueRange")
+            if self._get_vehicle_value(vehicle, ["isCharging"]) is not None:
+                has.append("EVIsCharging")
+            if (
+                self._get_vehicle_value(
+                    vehicle, ["estimatedUsableBatteryCapacityInKwh", "usableCapacityKwh"]
+                )
+                is not None
+                or self._get_vehicle_value(
+                    vehicle, ["highVoltageBatteryUsableCapacityKwh", "kwh"]
+                )
+                is not None
+                or self._get_vehicle_value(
+                    vehicle, ["factoryBatteryCapacity", "usableCapacityKwh"]
+                )
+                is not None
+            ):
+                has.append("EVBatteryCapacity")
+            if (
+                self._get_vehicle_value(
+                    vehicle, ["highVoltageBatteryHealth", "relativeUsableCapacity"]
+                )
+                is not None
+            ):
+                has.append("EVBatteryHealth")
+            if (
+                self._get_vehicle_value(
+                    vehicle,
+                    ["averageBatteryConsumptionInKwhPer100Km", "efficiencyKwhPer100Km"],
+                )
+                is not None
+                or self._get_vehicle_value(vehicle, ["batteryEfficiencyKmPerKwh"])
+                is not None
+            ):
+                has.append("EVEfficiency")
+            if self._get_vehicle_value(vehicle, ["isMainPowerDisconnected"]) is not None:
+                has.append("MainPowerDisconnected")
+            if (
+                self._get_vehicle_value(vehicle, ["driverScore", "driverScore"])
+                is not None
+            ):
+                has.append("DriverScore")
 
             if self._get_vehicle_value(vehicle, ["ignition", "on"]) is not None:
                 has.append("Ignition")
@@ -650,6 +758,50 @@ vehicle(id: %s) {
         chargePercentage {
           pct
           time
+        }
+        isCharging
+        chargingStatus {
+          startChargePercentage
+          startTime
+          endedAt
+          chargedPercentage
+          averageChargeSpeed
+          chargeInKwhIncrease
+          rangeIncrease
+          timeUntil80PercentCharge
+          showSummaryForChargeEnded
+        }
+        factoryBatteryCapacity {
+          usableCapacityKwh
+          totalCapacityKwh
+        }
+        estimatedUsableBatteryCapacityInKwh {
+          usableCapacityKwh
+          date
+        }
+        highVoltageBatteryTotalCapacityKwh {
+          kwh
+          time
+        }
+        highVoltageBatteryUsableCapacityKwh {
+          kwh
+          time
+        }
+        highVoltageBatteryHealth {
+          relativeUsableCapacity
+          predictedRelativeUsableCapacity
+          cycles
+          time
+        }
+        averageBatteryConsumptionInKwhPer100Km {
+          date
+          efficiencyKwhPer100Km
+        }
+        batteryEfficiencyKmPerKwh
+        isMainPowerDisconnected
+        driverScore {
+          driverScore
+          previousDriverScore
         }
         highVoltageBatteryTemperature {
           celsius
