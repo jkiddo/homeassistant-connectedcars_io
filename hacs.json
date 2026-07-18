@@ -2,5 +2,7 @@
   "name": "Connectedcars.io (Min Volkswagen)",
   "render_readme": true,
   "country": ["DK"],
-  "homeassistant": "2024.12.0"
+  "homeassistant": "2024.12.0",
+  "zip_release": true,
+  "filename": "connectedcars_io.zip"
 }
